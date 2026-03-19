@@ -2,7 +2,7 @@ import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
-BOT_TOKEN = os.getenv("8770148821:AAEgZxSwJwRsOwDyUbT4GJKJiS3dOaEhvec")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPERATORS_CHAT_ID = -5159543096
 
 print("DEBUG BOT_TOKEN EXISTS:", BOT_TOKEN is not None)
