@@ -12,9 +12,11 @@ print("DEBUG BOT_TOKEN LEN:", len(BOT_TOKEN) if BOT_TOKEN else 0)
 message_map = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("COMMAND /start RECEIVED")
     await update.message.reply_text("Напишите ваш вопрос, оператор скоро ответит.")
 
 async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("PRIVATE MESSAGE RECEIVED")
     message = update.message
     chat = update.effective_chat
     user = update.effective_user
@@ -34,9 +36,12 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
     )
 
     message_map[sent.message_id] = user.id
+    print("SENT TO GROUP:", sent.message_id)
+
     await message.reply_text("Ваше обращение отправлено оператору.")
 
 async def handle_operator_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("GROUP REPLY RECEIVED")
     message = update.message
     chat = update.effective_chat
 
@@ -44,10 +49,14 @@ async def handle_operator_reply(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if not message.reply_to_message:
+        print("NOT A REPLY")
         return
 
     replied_message_id = message.reply_to_message.message_id
     target_user_id = message_map.get(replied_message_id)
+
+    print("REPLY TO:", replied_message_id)
+    print("TARGET USER:", target_user_id)
 
     if not target_user_id:
         await message.reply_text("Не найден пользователь для этого reply.")
@@ -61,7 +70,9 @@ async def handle_operator_reply(update: Update, context: ContextTypes.DEFAULT_TY
     await message.reply_text("Ответ отправлен пользователю.")
 
 def main():
+    print("BOT STARTING")
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+    print("APP BUILT")
 
     app.add_handler(CommandHandler("start", start), group=0)
     app.add_handler(
@@ -79,8 +90,11 @@ def main():
         group=2,
     )
 
-    print("Bot started")
+    print("RUN POLLING")
     app.run_polling()
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
