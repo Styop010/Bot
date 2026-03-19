@@ -2,13 +2,12 @@ import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
-BOT_TOKEN = os.getenv("8770148821:AAG1FlEOMMCbwPAOLN_fhxFT14UtztEQnRQ")
+BOT_TOKEN = os.getenv("8770148821:AAErlUUMWzLa4Jy3Xmfuic9EnE3hIjSy4HI")
 OPERATORS_CHAT_ID = -5159543096
 
-print("ENV CHECK")
-print("BOT_TOKEN exists:", BOT_TOKEN is not None)
-print("BOT_TOKEN repr:", repr(BOT_TOKEN))
-print("BOT_TOKEN length:", len(BOT_TOKEN) if BOT_TOKEN else 0)
+print("DEBUG BOT_TOKEN EXISTS:", BOT_TOKEN is not None)
+print("DEBUG BOT_TOKEN REPR:", repr(BOT_TOKEN))
+print("DEBUG BOT_TOKEN LEN:", len(BOT_TOKEN) if BOT_TOKEN else 0)
 
 message_map = {}
 
