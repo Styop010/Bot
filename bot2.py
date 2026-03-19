@@ -5,6 +5,11 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, Messa
 BOT_TOKEN = os.getenv("8770148821:AAG1FlEOMMCbwPAOLN_fhxFT14UtztEQnRQ")
 OPERATORS_CHAT_ID = -5159543096
 
+print("ENV CHECK")
+print("BOT_TOKEN exists:", BOT_TOKEN is not None)
+print("BOT_TOKEN repr:", repr(BOT_TOKEN))
+print("BOT_TOKEN length:", len(BOT_TOKEN) if BOT_TOKEN else 0)
+
 message_map = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
