@@ -1266,6 +1266,91 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Closed: {closed_cnt}"
     )
 
+async def cmd_force_close(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or update.effective_chat.id != OPERATORS_CHAT_ID:
+        return
+
+    if not context.args:
+        await update.message.reply_text("Использование: /force_close REQ-000123")
+        return
+
+    request_number = context.args[0].strip()
+
+    row = get_request_by_number(request_number)
+    if not row:
+        await update.message.reply_text(f"Тикет {request_number} не найден.")
+        return
+
+    if row["status"] == "closed":
+        await update.message.reply_text(f"Тикет {request_number} уже закрыт.")
+        return
+
+    update_request_status(row["id"], "closed")
+
+    try:
+        await context.bot.send_message(
+            chat_id=row["user_id"],
+            text=(
+                f"✅ Ваше обращение {request_number} было закрыто оператором.\n\n"
+                f"Теперь вы можете создать новое через /start."
+            ),
+            reply_markup=ReplyKeyboardRemove(),
+        )
+    except Exception as e:
+        logger.warning("Не удалось уведомить пользователя: %s", e)
+
+    await update.message.reply_text(f"Тикет {request_number} закрыт.")
+
+async def cmd_force_close_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or update.effective_chat.id != OPERATORS_CHAT_ID:
+        return
+
+    conn = db_connect()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, request_number, user_id, language
+        FROM requests
+        WHERE status != 'closed'
+    """)
+    rows = cur.fetchall()
+
+    if not rows:
+        conn.close()
+        await update.message.reply_text("Активных тикетов нет.")
+        return
+
+    cur.execute("""
+        UPDATE requests
+        SET status = 'closed',
+            dialog_state = 'closed',
+            closed_at = ?,
+            updated_at = ?
+        WHERE status != 'closed'
+    """, (now_iso(), now_iso()))
+
+    conn.commit()
+    conn.close()
+
+    closed_count = 0
+
+    for row in rows:
+        try:
+            await context.bot.send_message(
+                chat_id=row["user_id"],
+                text=(
+                    f"✅ Ваше обращение {row['request_number']} было принудительно закрыто.\n\n"
+                    f"Теперь вы можете открыть новое через /start."
+                ),
+                reply_markup=ReplyKeyboardRemove(),
+            )
+        except Exception as e:
+            logger.warning("Не удалось уведомить пользователя %s: %s", row["user_id"], e)
+
+        closed_count += 1
+
+    await update.message.reply_text(f"Принудительно закрыто тикетов: {closed_count}")
+
 
 async def cmd_clid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or update.effective_chat.id != OPERATORS_CHAT_ID:
@@ -1303,6 +1388,8 @@ def main():
     app.add_handler(CommandHandler("closed_requests", cmd_closed_requests))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("clid", cmd_clid))
+    app.add_handler(CommandHandler("force_close", cmd_force_close))
+    app.add_handler(CommandHandler("force_close_all", cmd_force_close_all))
 
     app.add_handler(CallbackQueryHandler(handle_callback))
 
