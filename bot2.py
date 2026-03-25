@@ -24,9 +24,8 @@ from telegram.ext import (
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPERATORS_CHAT_ID = -1003855882419
-DB_PATH = os.getenv("DB_PATH", "/var/data/support_bot.db")
+DB_PATH = os.getenv("DB_PATH", "support_bot.db")
 
-# SLA в минутах — можешь поменять под себя
 SLA_TAKE_MINUTES = 10
 SLA_FIRST_REPLY_MINUTES = 20
 SLA_CLOSE_HOURS = 24
@@ -57,14 +56,14 @@ LANG_TEXTS = {
         "ask_support_id": "Խնդրում ենք մուտքագրել support դիմումի ID-ն։",
         "request_sent": "Ձեր դիմումն ուղարկվել է օպերատորին։",
         "restart_hint": "Սկսեք /start հրամանով։",
-        "invalid_clid": "CLID-ը պետք է լինի միայն թվերից, սկսվի 40000-ով։",
-        "invalid_support_id": "Support ID-ը չպետք է դատարկ լինի և պետք է լինի մինչև 50 սիմվոլ։",
+        "invalid_clid": "CLID-ը պետք է լինի միայն թվերից և սկսվի 40000-ով։",
+        "invalid_support_id": "Support ID-ը պետք է լինի մինչև 50 սիմվոլ։",
         "issue_required": "Ուղարկեք խնդրի տեքստ կամ նկար։",
         "closed_to_user": "✅ Ձեր դիմումը փակվել է։",
         "wait_operator": "⏳ Խնդրում ենք սպասել օպերատորի պատասխանին ընթացիկ դիմումի շրջանակում։",
         "one_message_now": "✅ Օպերատորը պատասխանել է։ Դուք կարող եք ուղարկել մեկ հաջորդ հաղորդագրություն այս դիմումի շրջանակում։",
         "ticket_taken": "👤 Ձեր դիմումը վերցրել է օպերատորը։ Հանրային անունը՝ {alias}",
-        "ticket_closed_create_new": "✅ Հին դիմումը փակված է։ Հիմա կարող եք ստեղծել նոր դիմում /start հրամանով։",
+        "ticket_closed_create_new": "✅ Նախորդ դիմումը փակված է։ Այժմ կարող եք ստեղծել նոր դիմում /start հրամանով։",
         "reply_prefix": "💬 {alias}-ի պատասխանը",
         "topics": {
             "drivers": "Վարորդների հետ խնդիրներ",
@@ -128,7 +127,6 @@ LANG_TEXTS = {
     },
 }
 
-# Публичные псевдонимы операторов по языкам
 PUBLIC_OPERATOR_ALIASES = {
     "ru": ["Анна", "Максим", "Елена", "Мария", "Даниил", "София"],
     "hy": ["Անի", "Դավիթ", "Մարիամ", "Նարե", "Արման", "Լիլիթ"],
@@ -137,10 +135,6 @@ PUBLIC_OPERATOR_ALIASES = {
 
 user_sessions = {}
 
-
-# =========================
-# DB
-# =========================
 
 def db_connect():
     db_dir = os.path.dirname(DB_PATH)
@@ -206,6 +200,7 @@ def init_db():
 
             initial_group_message_id INTEGER,
             topic_thread_id INTEGER,
+            topic_control_message_id INTEGER,
 
             assigned_operator_id INTEGER,
             assigned_operator_name TEXT,
@@ -219,7 +214,8 @@ def init_db():
 
             sla_take_deadline TEXT,
             sla_first_reply_deadline TEXT,
-            sla_close_deadline TEXT
+            sla_close_deadline TEXT,
+            sla_take_alert_sent INTEGER NOT NULL DEFAULT 0
         )
     """)
 
@@ -238,10 +234,10 @@ def init_db():
         )
     """)
 
-    # Миграция на случай старой базы
     ensure_column(conn, "requests", "dialog_state", "TEXT NOT NULL DEFAULT 'waiting_operator'")
     ensure_column(conn, "requests", "initial_group_message_id", "INTEGER")
     ensure_column(conn, "requests", "topic_thread_id", "INTEGER")
+    ensure_column(conn, "requests", "topic_control_message_id", "INTEGER")
     ensure_column(conn, "requests", "assigned_operator_id", "INTEGER")
     ensure_column(conn, "requests", "assigned_operator_name", "TEXT")
     ensure_column(conn, "requests", "assigned_operator_alias", "TEXT")
@@ -251,6 +247,7 @@ def init_db():
     ensure_column(conn, "requests", "sla_take_deadline", "TEXT")
     ensure_column(conn, "requests", "sla_first_reply_deadline", "TEXT")
     ensure_column(conn, "requests", "sla_close_deadline", "TEXT")
+    ensure_column(conn, "requests", "sla_take_alert_sent", "INTEGER NOT NULL DEFAULT 0")
 
     conn.close()
 
@@ -283,12 +280,12 @@ def create_request(
             topic_key, topic_label, issue_kind, issue_text,
             issue_photo_file_id, issue_photo_caption, clid,
             support_request_id, status, dialog_state,
-            initial_group_message_id, topic_thread_id,
+            initial_group_message_id, topic_thread_id, topic_control_message_id,
             assigned_operator_id, assigned_operator_name, assigned_operator_alias,
             created_at, taken_at, first_reply_at, closed_at, updated_at,
-            sla_take_deadline, sla_first_reply_deadline, sla_close_deadline
+            sla_take_deadline, sla_first_reply_deadline, sla_close_deadline, sla_take_alert_sent
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         "",
         user_id,
@@ -310,6 +307,7 @@ def create_request(
         None,
         None,
         None,
+        None,
         ts,
         None,
         None,
@@ -318,6 +316,7 @@ def create_request(
         plus_minutes_iso(SLA_TAKE_MINUTES),
         plus_minutes_iso(SLA_FIRST_REPLY_MINUTES),
         plus_hours_iso(SLA_CLOSE_HOURS),
+        0,
     ))
 
     request_id = cur.lastrowid
@@ -444,6 +443,18 @@ def set_initial_group_message_id(request_id: int, message_id: int):
     conn.close()
 
 
+def set_topic_control_message_id(request_id: int, message_id: int):
+    conn = db_connect()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE requests
+        SET topic_control_message_id = ?, updated_at = ?
+        WHERE id = ?
+    """, (message_id, now_iso(), request_id))
+    conn.commit()
+    conn.close()
+
+
 def assign_request_to_operator(
     request_id: int,
     operator_id: int,
@@ -524,6 +535,18 @@ def mark_first_reply_if_needed(request_id: int):
     conn.close()
 
 
+def mark_take_alert_sent(request_id: int):
+    conn = db_connect()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE requests
+        SET sla_take_alert_sent = 1, updated_at = ?
+        WHERE id = ?
+    """, (now_iso(), request_id))
+    conn.commit()
+    conn.close()
+
+
 def get_requests_by_status(status: str, limit: int = 20):
     conn = db_connect()
     cur = conn.cursor()
@@ -572,9 +595,22 @@ def get_stats():
     return total, new_cnt, in_progress_cnt, closed_cnt
 
 
-# =========================
-# HELPERS
-# =========================
+def get_overdue_take_requests():
+    conn = db_connect()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT * FROM requests
+        WHERE status = 'new'
+          AND taken_at IS NULL
+          AND sla_take_alert_sent = 0
+          AND sla_take_deadline IS NOT NULL
+          AND sla_take_deadline < ?
+        ORDER BY id ASC
+    """, (now_iso(),))
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
 
 def get_user_lang(user_id: int) -> str:
     session = user_sessions.get(user_id, {})
@@ -620,6 +656,17 @@ def build_general_ticket_keyboard(request_number: str, status: str):
     elif status == "in_progress":
         row1.append(InlineKeyboardButton("✅ Закрыть", callback_data=f"req:close:{request_number}"))
         row1.append(InlineKeyboardButton("🔄 Переоткрыть", callback_data=f"req:reopen:{request_number}"))
+    else:
+        row1.append(InlineKeyboardButton("🔄 Переоткрыть", callback_data=f"req:reopen:{request_number}"))
+
+    row2 = [InlineKeyboardButton("📋 Показать карточку", callback_data=f"req:card:{request_number}")]
+    return InlineKeyboardMarkup([row1, row2])
+
+
+def build_topic_control_keyboard(request_number: str, status: str):
+    row1 = []
+    if status in ("new", "in_progress"):
+        row1.append(InlineKeyboardButton("✅ Закрыть тикет", callback_data=f"req:close:{request_number}"))
     else:
         row1.append(InlineKeyboardButton("🔄 Переоткрыть", callback_data=f"req:reopen:{request_number}"))
 
@@ -675,14 +722,6 @@ def validate_support_request_id(value: str) -> bool:
     return bool(value) and len(value) <= 50
 
 
-async def send_wait_notice(context: ContextTypes.DEFAULT_TYPE, user_id: int, lang: str):
-    await context.bot.send_message(
-        chat_id=user_id,
-        text=LANG_TEXTS[lang]["wait_operator"],
-        reply_markup=build_wait_keyboard(lang),
-    )
-
-
 async def send_user_message_to_thread(context: ContextTypes.DEFAULT_TYPE, row, text=None, photo_file_id=None, caption=None):
     prefix = f"👤 Пользователь ответил по заявке {row['request_number']}\n\n"
 
@@ -719,9 +758,28 @@ async def send_operator_reply_to_user(context: ContextTypes.DEFAULT_TYPE, row, t
         )
 
 
-# =========================
-# START / CALLBACKS
-# =========================
+async def send_sla_take_alerts(context: ContextTypes.DEFAULT_TYPE):
+    rows = get_overdue_take_requests()
+    for row in rows:
+        try:
+            await context.bot.send_message(
+                chat_id=OPERATORS_CHAT_ID,
+                text=(
+                    f"🚨 SLA ALERT: тикет не взят в работу более {SLA_TAKE_MINUTES} минут\n\n"
+                    f"🧾 {row['request_number']}\n"
+                    f"🆔 CLID: {row['clid']}\n"
+                    f"📂 Тема: {row['topic_label']}\n"
+                    f"🕒 Создано: {row['created_at']}"
+                ),
+            )
+            mark_take_alert_sent(row["id"])
+        except Exception as e:
+            logger.warning("Не удалось отправить SLA alert по %s: %s", row["request_number"], e)
+
+
+async def periodic_sla_check(context: ContextTypes.DEFAULT_TYPE):
+    await send_sla_take_alerts(context)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -767,7 +825,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data or ""
 
-    # Выбор языка
     if data.startswith("lang:"):
         lang = data.split(":", 1)[1]
         user_sessions[user.id] = {
@@ -780,7 +837,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Выбор темы
     if data.startswith("topic:"):
         topic_key = data.split(":", 1)[1]
         session = user_sessions.get(user.id)
@@ -796,7 +852,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(LANG_TEXTS[lang]["ask_issue"])
         return
 
-    # Операторские действия
     if data.startswith("req:"):
         parts = data.split(":")
         if len(parts) != 3:
@@ -815,7 +870,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         operator_name = user.full_name or str(user.id)
 
-        # Взять в работу
         if action == "start":
             if row["topic_thread_id"]:
                 await query.message.reply_text("Заявка уже взята в работу и переведена в отдельную тему.")
@@ -827,7 +881,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=OPERATORS_CHAT_ID,
                 name=f"{request_number} | CLID {row['clid']}",
             )
-
             thread_id = forum_topic.message_thread_id
 
             assign_request_to_operator(
@@ -840,13 +893,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             row = get_request_by_number(request_number)
 
-            # Обновить кнопки на старой карточке
             await query.edit_message_reply_markup(
                 reply_markup=build_general_ticket_keyboard(request_number, row["status"])
             )
 
-            # Сообщение в новую тему
-            await context.bot.send_message(
+            control_msg = await context.bot.send_message(
                 chat_id=OPERATORS_CHAT_ID,
                 message_thread_id=thread_id,
                 text=(
@@ -856,24 +907,26 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"📌 Статус: {row['status']}\n"
                     f"🔁 Диалог: {row['dialog_state']}"
                 ),
+                reply_markup=build_topic_control_keyboard(request_number, row["status"]),
             )
+            set_topic_control_message_id(row["id"], control_msg.message_id)
 
-            # Карточка в тему
             if row["issue_kind"] == "photo" and row["issue_photo_file_id"]:
                 await context.bot.send_photo(
                     chat_id=OPERATORS_CHAT_ID,
                     message_thread_id=thread_id,
                     photo=row["issue_photo_file_id"],
                     caption=request_card_text(row),
+                    reply_markup=build_topic_control_keyboard(request_number, row["status"]),
                 )
             else:
                 await context.bot.send_message(
                     chat_id=OPERATORS_CHAT_ID,
                     message_thread_id=thread_id,
                     text=request_card_text(row),
+                    reply_markup=build_topic_control_keyboard(request_number, row["status"]),
                 )
 
-            # Уведомить пользователя
             await context.bot.send_message(
                 chat_id=row["user_id"],
                 text=LANG_TEXTS[row["language"]]["ticket_taken"].format(alias=alias),
@@ -885,14 +938,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Закрыть
         if action == "close":
             update_request_status(row["id"], "closed")
             row = get_request_by_number(request_number)
 
-            await query.edit_message_reply_markup(
-                reply_markup=build_general_ticket_keyboard(request_number, row["status"])
-            )
+            try:
+                await query.edit_message_reply_markup(
+                    reply_markup=build_general_ticket_keyboard(request_number, row["status"])
+                )
+            except Exception:
+                pass
+
+            if row["topic_thread_id"]:
+                try:
+                    await context.bot.send_message(
+                        chat_id=OPERATORS_CHAT_ID,
+                        message_thread_id=row["topic_thread_id"],
+                        text=f"✅ Тикет {request_number} закрыт.",
+                        reply_markup=build_topic_control_keyboard(request_number, row["status"]),
+                    )
+                except Exception as e:
+                    logger.warning("Не удалось отправить сообщение о закрытии в тему: %s", e)
 
             await query.message.reply_text(f"✅ Заявка {request_number} переведена в статус closed.")
 
@@ -906,19 +972,32 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.warning("Не удалось уведомить пользователя о закрытии: %s", e)
             return
 
-        # Переоткрыть
         if action == "reopen":
             update_request_status(row["id"], "in_progress")
             update_dialog_state(row["id"], "waiting_operator")
             row = get_request_by_number(request_number)
 
-            await query.edit_message_reply_markup(
-                reply_markup=build_general_ticket_keyboard(request_number, row["status"])
-            )
+            try:
+                await query.edit_message_reply_markup(
+                    reply_markup=build_general_ticket_keyboard(request_number, row["status"])
+                )
+            except Exception:
+                pass
+
+            if row["topic_thread_id"]:
+                try:
+                    await context.bot.send_message(
+                        chat_id=OPERATORS_CHAT_ID,
+                        message_thread_id=row["topic_thread_id"],
+                        text=f"🔄 Тикет {request_number} переоткрыт.",
+                        reply_markup=build_topic_control_keyboard(request_number, row["status"]),
+                    )
+                except Exception as e:
+                    logger.warning("Не удалось отправить сообщение о переоткрытии в тему: %s", e)
+
             await query.message.reply_text(f"🔄 Заявка {request_number} переоткрыта.")
             return
 
-        # Показать карточку
         if action == "card":
             row = get_request_by_number(request_number)
             if row["issue_kind"] == "photo" and row["issue_photo_file_id"]:
@@ -931,10 +1010,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
 
-# =========================
-# PRIVATE USER FLOW
-# =========================
-
 async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
     user = update.effective_user
@@ -943,19 +1018,15 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
     if not message or not user or not chat or chat.type != "private":
         return
 
-    # Игнорируем сообщения от самого wait-кнопки как "нормальное" сообщение
     incoming_text = (message.text or "").strip()
     has_photo = bool(message.photo)
     caption = message.caption or ""
-    lang_session = get_user_lang(user.id)
 
     active = get_active_request_for_user(user.id)
 
-    # Если есть активный тикет — не создаём новый
     if active:
         lang = active["language"]
 
-        # Пока ждём оператора — блокируем повторные сообщения
         if active["dialog_state"] == "waiting_operator":
             await message.reply_text(
                 LANG_TEXTS[lang]["wait_operator"],
@@ -963,7 +1034,6 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
 
-        # Пользователю разрешено ровно одно следующее сообщение
         if active["dialog_state"] == "waiting_user":
             if not active["topic_thread_id"]:
                 await message.reply_text(
@@ -1017,7 +1087,6 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
 
-    # Если активного тикета нет — обычный flow создания тикета
     session = user_sessions.get(user.id)
     if not session:
         await message.reply_text(LANG_TEXTS["ru"]["restart_hint"])
@@ -1026,7 +1095,6 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
     current_step = session.get("step")
     lang = session.get("lang", "ru")
 
-    # Шаг: описание проблемы
     if current_step == Step.WAIT_ISSUE:
         if not incoming_text and not has_photo:
             await message.reply_text(LANG_TEXTS[lang]["issue_required"])
@@ -1048,7 +1116,6 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
         await message.reply_text(LANG_TEXTS[lang]["ask_clid"])
         return
 
-    # Шаг: CLID
     if current_step == Step.WAIT_CLID:
         if not validate_clid(incoming_text):
             await message.reply_text(LANG_TEXTS[lang]["invalid_clid"])
@@ -1059,7 +1126,6 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
         await message.reply_text(LANG_TEXTS[lang]["ask_support_id"])
         return
 
-    # Шаг: support ID
     if current_step == Step.WAIT_SUPPORT_ID:
         if not validate_support_request_id(incoming_text):
             await message.reply_text(LANG_TEXTS[lang]["invalid_support_id"])
@@ -1088,31 +1154,33 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
 
         request_number = generate_request_number(request_id)
         row = get_request_by_number(request_number)
-
         keyboard = build_general_ticket_keyboard(request_number, row["status"])
 
-        if row["issue_kind"] == "photo" and row["issue_photo_file_id"]:
-            sent = await context.bot.send_photo(
-                chat_id=OPERATORS_CHAT_ID,
-                photo=row["issue_photo_file_id"],
-                caption=request_card_text(row),
-                reply_markup=keyboard,
-            )
-        else:
-            sent = await context.bot.send_message(
-                chat_id=OPERATORS_CHAT_ID,
-                text=request_card_text(row),
-                reply_markup=keyboard,
-            )
-
-        set_initial_group_message_id(request_id, sent.message_id)
+        try:
+            if row["issue_kind"] == "photo" and row["issue_photo_file_id"]:
+                sent = await context.bot.send_photo(
+                    chat_id=OPERATORS_CHAT_ID,
+                    photo=row["issue_photo_file_id"],
+                    caption=request_card_text(row),
+                    reply_markup=keyboard,
+                )
+            else:
+                sent = await context.bot.send_message(
+                    chat_id=OPERATORS_CHAT_ID,
+                    text=request_card_text(row),
+                    reply_markup=keyboard,
+                )
+            set_initial_group_message_id(request_id, sent.message_id)
+        except Exception as e:
+            logger.exception("Не удалось отправить заявку в операторский чат: %s", e)
+            await message.reply_text("Не удалось отправить обращение оператору. Попробуйте позже.")
+            return
 
         await message.reply_text(
             f"{LANG_TEXTS[lang]['request_sent']}\n\n🧾 Request number: {request_number}",
             reply_markup=build_wait_keyboard(lang),
         )
 
-        # После создания тикета пользователь ждёт ответа оператора
         user_sessions[user.id] = {
             "step": Step.CHOOSE_LANGUAGE,
             "lang": lang,
@@ -1121,10 +1189,6 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
 
     await message.reply_text(LANG_TEXTS[lang]["restart_hint"])
 
-
-# =========================
-# OPERATOR MESSAGES
-# =========================
 
 async def handle_operator_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
@@ -1140,7 +1204,6 @@ async def handle_operator_message(update: Update, context: ContextTypes.DEFAULT_
     if message.text and message.text.startswith("/"):
         return
 
-    # 1) Если сообщение пришло в отдельной теме тикета — это рабочий ответ оператора
     if message.message_thread_id:
         row = get_request_by_thread_id(message.message_thread_id)
         if row and row["status"] != "closed":
@@ -1196,7 +1259,6 @@ async def handle_operator_message(update: Update, context: ContextTypes.DEFAULT_
             )
             return
 
-    # 2) Если оператор пишет reply на первичную карточку до взятия — подсказываем сначала взять
     if message.reply_to_message:
         row = get_request_by_initial_message_id(message.reply_to_message.message_id)
         if row and not row["topic_thread_id"]:
@@ -1206,10 +1268,6 @@ async def handle_operator_message(update: Update, context: ContextTypes.DEFAULT_
             )
             return
 
-
-# =========================
-# COMMANDS FOR OPERATORS
-# =========================
 
 async def cmd_new_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or update.effective_chat.id != OPERATORS_CHAT_ID:
@@ -1266,6 +1324,27 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Closed: {closed_cnt}"
     )
 
+
+async def cmd_clid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or update.effective_chat.id != OPERATORS_CHAT_ID:
+        return
+
+    if not context.args:
+        await update.message.reply_text("Использование: /clid 400004151762")
+        return
+
+    clid = context.args[0].strip()
+    rows = get_requests_by_clid(clid)
+
+    if not rows:
+        await update.message.reply_text(f"По CLID {clid} заявки не найдены.")
+        return
+
+    await update.message.reply_text(
+        f"🔎 Заявки по CLID {clid}:\n\n" + "\n".join(short_request_line(r) for r in rows)
+    )
+
+
 async def cmd_force_close(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or update.effective_chat.id != OPERATORS_CHAT_ID:
         return
@@ -1275,8 +1354,8 @@ async def cmd_force_close(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     request_number = context.args[0].strip()
-
     row = get_request_by_number(request_number)
+
     if not row:
         await update.message.reply_text(f"Тикет {request_number} не найден.")
         return
@@ -1299,7 +1378,19 @@ async def cmd_force_close(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.warning("Не удалось уведомить пользователя: %s", e)
 
+    if row["topic_thread_id"]:
+        try:
+            await context.bot.send_message(
+                chat_id=OPERATORS_CHAT_ID,
+                message_thread_id=row["topic_thread_id"],
+                text=f"✅ Тикет {request_number} принудительно закрыт командой /force_close.",
+                reply_markup=build_topic_control_keyboard(request_number, "closed"),
+            )
+        except Exception as e:
+            logger.warning("Не удалось написать в тему при force_close: %s", e)
+
     await update.message.reply_text(f"Тикет {request_number} закрыт.")
+
 
 async def cmd_force_close_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or update.effective_chat.id != OPERATORS_CHAT_ID:
@@ -1309,7 +1400,7 @@ async def cmd_force_close_all(update: Update, context: ContextTypes.DEFAULT_TYPE
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT id, request_number, user_id, language
+        SELECT id, request_number, user_id, language, topic_thread_id
         FROM requests
         WHERE status != 'closed'
     """)
@@ -1347,34 +1438,21 @@ async def cmd_force_close_all(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as e:
             logger.warning("Не удалось уведомить пользователя %s: %s", row["user_id"], e)
 
+        if row["topic_thread_id"]:
+            try:
+                await context.bot.send_message(
+                    chat_id=OPERATORS_CHAT_ID,
+                    message_thread_id=row["topic_thread_id"],
+                    text=f"✅ Тикет {row['request_number']} принудительно закрыт командой /force_close_all.",
+                    reply_markup=build_topic_control_keyboard(row["request_number"], "closed"),
+                )
+            except Exception as e:
+                logger.warning("Не удалось написать в тему при force_close_all: %s", e)
+
         closed_count += 1
 
     await update.message.reply_text(f"Принудительно закрыто тикетов: {closed_count}")
 
-
-async def cmd_clid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.effective_chat or update.effective_chat.id != OPERATORS_CHAT_ID:
-        return
-
-    if not context.args:
-        await update.message.reply_text("Использование: /clid 400004151762")
-        return
-
-    clid = context.args[0].strip()
-    rows = get_requests_by_clid(clid)
-
-    if not rows:
-        await update.message.reply_text(f"По CLID {clid} заявки не найдены.")
-        return
-
-    await update.message.reply_text(
-        f"🔎 Заявки по CLID {clid}:\n\n" + "\n".join(short_request_line(r) for r in rows)
-    )
-
-
-# =========================
-# MAIN
-# =========================
 
 def main():
     logger.info("BOT STARTING")
@@ -1402,6 +1480,10 @@ def main():
         MessageHandler(filters.Chat(OPERATORS_CHAT_ID) & (filters.TEXT | filters.PHOTO) & ~filters.COMMAND, handle_operator_message),
         group=2,
     )
+
+    job_queue = app.job_queue
+    if job_queue:
+        job_queue.run_repeating(periodic_sla_check, interval=60, first=20)
 
     logger.info("RUN POLLING")
     app.run_polling()
