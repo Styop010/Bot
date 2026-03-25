@@ -23,7 +23,7 @@ from telegram.ext import (
 )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-OPERATORS_CHAT_ID = -5159543096
+OPERATORS_CHAT_ID = -1003855882419
 DB_PATH = os.getenv("DB_PATH", "/var/data/support_bot.db")
 
 # SLA в минутах — можешь поменять под себя
