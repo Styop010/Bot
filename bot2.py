@@ -4,6 +4,7 @@ import logging
 import random
 from datetime import datetime, timedelta
 from enum import Enum
+from html import escape
 from typing import Optional
 
 from telegram import (
@@ -13,6 +14,7 @@ from telegram import (
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
 )
+from telegram.constants import ParseMode
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
@@ -48,80 +50,80 @@ class Step(str, Enum):
 
 LANG_TEXTS = {
     "hy": {
-        "lang_name": "Հայերեն",
+        "lang_name": "🇦🇲 Հայերեն",
         "start": "Ընտրեք լեզուն",
         "choose_topic": "Խնդրում ենք ընտրել դիմումի թեման։",
         "ask_issue": "Ուղարկեք խնդրի նկարագրությունը մեկ հաղորդագրությամբ կամ ուղարկեք նկար + caption։",
         "ask_clid": "Խնդրում ենք մուտքագրել տաքսոպարկի CLID-ը։",
         "ask_support_id": "Խնդրում ենք մուտքագրել support դիմումի ID-ն։",
-        "request_sent": "Ձեր դիմումն ուղարկվել է օպերատորին։",
+        "request_sent": "✅ Ձեր դիմումն ուղարկվել է օպերատորին։",
         "restart_hint": "Սկսեք /start հրամանով։",
-        "invalid_clid": "CLID-ը պետք է լինի միայն թվերից և սկսվի 40000-ով։",
-        "invalid_support_id": "Support ID-ը պետք է լինի մինչև 50 սիմվոլ։",
-        "issue_required": "Ուղարկեք խնդրի տեքստ կամ նկար։",
+        "invalid_clid": "⚠️ CLID-ը պետք է լինի միայն թվերից և սկսվի 40000-ով։",
+        "invalid_support_id": "⚠️ Support ID-ը պետք է լինի մինչև 50 սիմվոլ։",
+        "issue_required": "⚠️ Ուղարկեք խնդրի տեքստ կամ նկար։",
         "closed_to_user": "✅ Ձեր դիմումը փակվել է։",
         "wait_operator": "⏳ Խնդրում ենք սպասել օպերատորի պատասխանին ընթացիկ դիմումի շրջանակում։",
         "one_message_now": "✅ Օպերատորը պատասխանել է։ Դուք կարող եք ուղարկել մեկ հաջորդ հաղորդագրություն այս դիմումի շրջանակում։",
-        "ticket_taken": "👤 Ձեր դիմումը վերցրել է օպերատորը։ Հանրային անունը՝ {alias}",
+        "ticket_taken": "👤 Ձեր դիմումը վերցրել է օպերատորը։ Հանրային անունը՝ <b>{alias}</b>",
         "ticket_closed_create_new": "✅ Նախորդ դիմումը փակված է։ Այժմ կարող եք ստեղծել նոր դիմում /start հրամանով։",
         "reply_prefix": "💬 {alias}-ի պատասխանը",
         "topics": {
-            "drivers": "Վարորդների հետ խնդիրներ",
-            "dispatch": "Դիսպետչերական ծրագրի խնդիրներ",
-            "payouts": "Վճարումների խնդիրներ",
-            "other": "Այլ",
+            "drivers": "🚗 Վարորդների հետ խնդիրներ",
+            "dispatch": "💻 Դիսպետչերական ծրագրի խնդիրներ",
+            "payouts": "💰 Վճարումների խնդիրներ",
+            "other": "📎 Այլ",
         },
         "wait_button": "⏳ Սպասում եմ օպերատորի պատասխանին",
     },
     "ru": {
-        "lang_name": "Русский",
+        "lang_name": "🇷🇺 Русский",
         "start": "Выберите язык",
         "choose_topic": "Пожалуйста, выберите тему обращения.",
         "ask_issue": "Отправьте описание проблемы одним сообщением или отправьте фото с подписью.",
         "ask_clid": "Пожалуйста, введите CLID таксопарка.",
         "ask_support_id": "Пожалуйста, введите ID обращения в поддержку.",
-        "request_sent": "Ваше обращение отправлено оператору.",
+        "request_sent": "✅ Ваше обращение отправлено оператору.",
         "restart_hint": "Начните с команды /start.",
-        "invalid_clid": "CLID должен содержать только цифры и начинаться с 40000.",
-        "invalid_support_id": "ID обращения не должен быть пустым и должен быть не длиннее 50 символов.",
-        "issue_required": "Отправьте текст проблемы или фото.",
+        "invalid_clid": "⚠️ CLID должен содержать только цифры и начинаться с 40000.",
+        "invalid_support_id": "⚠️ ID обращения не должен быть пустым и должен быть не длиннее 50 символов.",
+        "issue_required": "⚠️ Отправьте текст проблемы или фото.",
         "closed_to_user": "✅ Ваше обращение было закрыто.",
         "wait_operator": "⏳ Дождитесь ответа оператора по текущему обращению.",
         "one_message_now": "✅ Оператор ответил. Вы можете отправить одно следующее сообщение в рамках текущего обращения.",
-        "ticket_taken": "👤 Ваше обращение взял в работу оператор. Публичное имя: {alias}",
+        "ticket_taken": "👤 Ваше обращение взял в работу оператор. Публичное имя: <b>{alias}</b>",
         "ticket_closed_create_new": "✅ Предыдущее обращение закрыто. Теперь вы можете открыть новое через /start.",
-        "reply_prefix": "💬 Ответ оператора {alias}",
+        "reply_prefix": "💬 Ответ оператора <b>{alias}</b>",
         "topics": {
-            "drivers": "Проблемы с водителями",
-            "dispatch": "Проблемы с диспетчерской программой",
-            "payouts": "Проблемы с выплатами",
-            "other": "Прочее",
+            "drivers": "🚗 Проблемы с водителями",
+            "dispatch": "💻 Проблемы с диспетчерской программой",
+            "payouts": "💰 Проблемы с выплатами",
+            "other": "📎 Прочее",
         },
         "wait_button": "⏳ Жду ответа оператора",
     },
     "en": {
-        "lang_name": "English",
+        "lang_name": "🇬🇧 English",
         "start": "Choose language",
         "choose_topic": "Please choose the request topic.",
         "ask_issue": "Send the issue as one text message or send a photo with caption.",
         "ask_clid": "Please enter the fleet CLID.",
         "ask_support_id": "Please enter the support request ID.",
-        "request_sent": "Your request has been sent to the operator.",
+        "request_sent": "✅ Your request has been sent to the operator.",
         "restart_hint": "Start with /start.",
-        "invalid_clid": "CLID must contain digits only and start with 40000.",
-        "invalid_support_id": "Support request ID must not be empty and must be no longer than 50 characters.",
-        "issue_required": "Please send issue text or a photo.",
+        "invalid_clid": "⚠️ CLID must contain digits only and start with 40000.",
+        "invalid_support_id": "⚠️ Support request ID must not be empty and must be no longer than 50 characters.",
+        "issue_required": "⚠️ Please send issue text or a photo.",
         "closed_to_user": "✅ Your request has been closed.",
-        "wait_operator": "⏳ Please wait for the operator’s reply on your current ticket.",
+        "wait_operator": "⏳ Please wait for the operator's reply on your current ticket.",
         "one_message_now": "✅ The operator has replied. You may send one next message in this ticket.",
-        "ticket_taken": "👤 Your request has been taken by an operator. Public name: {alias}",
+        "ticket_taken": "👤 Your request has been taken by an operator. Public name: <b>{alias}</b>",
         "ticket_closed_create_new": "✅ Your previous request is closed. You may now open a new one with /start.",
-        "reply_prefix": "💬 Reply from {alias}",
+        "reply_prefix": "💬 Reply from <b>{alias}</b>",
         "topics": {
-            "drivers": "Driver issues",
-            "dispatch": "Dispatch software issues",
-            "payouts": "Payout issues",
-            "other": "Other",
+            "drivers": "🚗 Driver issues",
+            "dispatch": "💻 Dispatch software issues",
+            "payouts": "💰 Payout issues",
+            "other": "📎 Other",
         },
         "wait_button": "⏳ Waiting for operator reply",
     },
@@ -129,11 +131,23 @@ LANG_TEXTS = {
 
 PUBLIC_OPERATOR_ALIASES = {
     "ru": ["Анна", "Максим", "Елена", "Мария", "Даниил", "София"],
-    "hy": ["Անի", "Դավիթ", "Մարիամ", "Նարե", "Արման", "Լիլիթ"],
+    "hy": ["Անի", "Դавид", "Мариам", "Нарэ", "Арман", "Лилит"],
     "en": ["Anna", "David", "Emma", "Daniel", "Sophia", "Leo"],
 }
 
 user_sessions = {}
+
+STATUS_LABELS = {
+    "new": "🆕 Новый",
+    "in_progress": "🛠 В работе",
+    "closed": "✅ Закрыт",
+}
+
+DIALOG_STATE_LABELS = {
+    "waiting_operator": "⏳ Ожидает оператора",
+    "waiting_user": "💬 Ожидает пользователя",
+    "closed": "🔒 Закрыт",
+}
 
 
 def db_connect():
@@ -170,6 +184,17 @@ def plus_minutes_iso(minutes: int) -> str:
 
 def plus_hours_iso(hours: int) -> str:
     return (datetime.utcnow() + timedelta(hours=hours)).isoformat(timespec="seconds")
+
+
+def fmt_dt(iso_str: Optional[str]) -> str:
+    """Format ISO datetime to a readable string."""
+    if not iso_str:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(iso_str)
+        return dt.strftime("%d.%m.%Y %H:%M UTC")
+    except ValueError:
+        return iso_str
 
 
 def init_db():
@@ -624,9 +649,9 @@ def pick_operator_alias(lang: str) -> str:
 
 def build_language_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Հայերեն", callback_data="lang:hy")],
-        [InlineKeyboardButton("Русский", callback_data="lang:ru")],
-        [InlineKeyboardButton("English", callback_data="lang:en")],
+        [InlineKeyboardButton("🇦🇲 Հայերեն", callback_data="lang:hy")],
+        [InlineKeyboardButton("🇷🇺 Русский", callback_data="lang:ru")],
+        [InlineKeyboardButton("🇬🇧 English", callback_data="lang:en")],
     ])
 
 
@@ -675,42 +700,55 @@ def build_topic_control_keyboard(request_number: str, status: str):
 
 
 def request_card_text(row) -> str:
-    issue_block = row["issue_text"] or row["issue_photo_caption"] or "—"
-    taken_line = ""
+    """Build a formatted HTML ticket card."""
+    issue_block = escape(row["issue_text"] or row["issue_photo_caption"] or "—")
+    lang_name = LANG_TEXTS.get(row["language"], {}).get("lang_name", row["language"])
+    status_label = STATUS_LABELS.get(row["status"], row["status"])
+    dialog_label = DIALOG_STATE_LABELS.get(row["dialog_state"], row["dialog_state"])
+
+    operator_block = ""
     if row["assigned_operator_name"]:
-        taken_line = (
-            f"\n👤 Взял в работу: {row['assigned_operator_name']}"
-            f"\n🎭 Публичный псевдоним: {row['assigned_operator_alias'] or '—'}"
+        operator_block = (
+            f"\n👤 <b>Оператор:</b> {escape(row['assigned_operator_name'])}"
+            f"\n🎭 <b>Псевдоним:</b> {escape(row['assigned_operator_alias'] or '—')}"
         )
 
     thread_line = ""
     if row["topic_thread_id"]:
-        thread_line = f"\n🧵 Topic ID: {row['topic_thread_id']}"
+        thread_line = f"\n🧵 <b>Topic ID:</b> <code>{row['topic_thread_id']}</code>"
+
+    username_str = f"@{escape(row['username'])}" if row["username"] else "—"
 
     return (
-        f"📩 Новое обращение от таксопарка\n\n"
-        f"🧾 Номер заявки: {row['request_number']}\n"
-        f"📌 Статус: {row['status']}\n"
-        f"🔁 Диалог: {row['dialog_state']}\n"
-        f"🌐 Язык: {LANG_TEXTS[row['language']]['lang_name']}\n"
-        f"📂 Тема: {row['topic_label']}\n"
-        f"🆔 CLID: {row['clid']}\n"
-        f"🎫 ID обращения в поддержку: {row['support_request_id']}\n"
-        f"{taken_line}"
-        f"{thread_line}\n\n"
-        f"👤 Имя: {row['full_name']}\n"
-        f"👤 Telegram User ID: {row['user_id']}\n"
-        f"🔗 Username: @{row['username'] if row['username'] else 'нет'}\n\n"
-        f"💬 Описание:\n{issue_block}\n\n"
-        f"🕒 Создано: {row['created_at']}"
+        f"📩 <b>Обращение от таксопарка</b>\n"
+        f"{'─' * 28}\n"
+        f"🧾 <b>Номер:</b> <code>{row['request_number']}</code>\n"
+        f"📌 <b>Статус:</b> {status_label}\n"
+        f"🔁 <b>Диалог:</b> {dialog_label}\n"
+        f"🌐 <b>Язык:</b> {lang_name}\n"
+        f"📂 <b>Тема:</b> {escape(row['topic_label'])}\n"
+        f"{'─' * 28}\n"
+        f"🆔 <b>CLID:</b> <code>{escape(row['clid'])}</code>\n"
+        f"🎫 <b>Support ID:</b> <code>{escape(row['support_request_id'])}</code>"
+        f"{operator_block}"
+        f"{thread_line}\n"
+        f"{'─' * 28}\n"
+        f"👤 <b>Имя:</b> {escape(row['full_name'])}\n"
+        f"🔗 <b>Username:</b> {username_str}\n"
+        f"🪪 <b>TG ID:</b> <code>{row['user_id']}</code>\n"
+        f"{'─' * 28}\n"
+        f"💬 <b>Описание:</b>\n{issue_block}\n"
+        f"{'─' * 28}\n"
+        f"🕒 <b>Создано:</b> {fmt_dt(row['created_at'])}"
     )
 
 
 def short_request_line(row) -> str:
+    status_label = STATUS_LABELS.get(row["status"], row["status"])
     return (
-        f"{row['request_number']} | {row['status']} | "
-        f"CLID: {row['clid']} | Support ID: {row['support_request_id']} | "
-        f"{row['topic_label']}"
+        f"<code>{row['request_number']}</code>  {status_label}\n"
+        f"   🆔 CLID: <code>{escape(row['clid'])}</code>  •  🎫 <code>{escape(row['support_request_id'])}</code>\n"
+        f"   📂 {escape(row['topic_label'])}  •  🕒 {fmt_dt(row['created_at'])}"
     )
 
 
@@ -723,37 +761,44 @@ def validate_support_request_id(value: str) -> bool:
 
 
 async def send_user_message_to_thread(context: ContextTypes.DEFAULT_TYPE, row, text=None, photo_file_id=None, caption=None):
-    prefix = f"👤 Пользователь ответил по заявке {row['request_number']}\n\n"
+    prefix = f"👤 <b>Пользователь</b> по заявке <code>{row['request_number']}</code>:\n\n"
 
     if photo_file_id:
         await context.bot.send_photo(
             chat_id=OPERATORS_CHAT_ID,
             message_thread_id=row["topic_thread_id"],
             photo=photo_file_id,
-            caption=prefix + (caption or ""),
+            caption=prefix + escape(caption or ""),
+            parse_mode=ParseMode.HTML,
         )
     else:
         await context.bot.send_message(
             chat_id=OPERATORS_CHAT_ID,
             message_thread_id=row["topic_thread_id"],
-            text=prefix + (text or ""),
+            text=prefix + escape(text or ""),
+            parse_mode=ParseMode.HTML,
         )
 
 
 async def send_operator_reply_to_user(context: ContextTypes.DEFAULT_TYPE, row, text=None, photo_file_id=None, caption=None):
     alias = row["assigned_operator_alias"] or "Support"
+    lang = row["language"]
+    reply_header = LANG_TEXTS[lang]["reply_prefix"].format(alias=escape(alias))
+    req_footer = f"\n\n🧾 <code>{row['request_number']}</code>"
 
     if photo_file_id:
         await context.bot.send_photo(
             chat_id=row["user_id"],
             photo=photo_file_id,
-            caption=f"{LANG_TEXTS[row['language']]['reply_prefix'].format(alias=alias)}\n\n{caption or ''}\n\n🧾 Request number: {row['request_number']}",
+            caption=f"{reply_header}\n\n{escape(caption or '')}{req_footer}",
+            parse_mode=ParseMode.HTML,
             reply_markup=ReplyKeyboardRemove(),
         )
     else:
         await context.bot.send_message(
             chat_id=row["user_id"],
-            text=f"{LANG_TEXTS[row['language']]['reply_prefix'].format(alias=alias)}\n\n{text or ''}\n\n🧾 Request number: {row['request_number']}",
+            text=f"{reply_header}\n\n{escape(text or '')}{req_footer}",
+            parse_mode=ParseMode.HTML,
             reply_markup=ReplyKeyboardRemove(),
         )
 
@@ -765,12 +810,14 @@ async def send_sla_take_alerts(context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=OPERATORS_CHAT_ID,
                 text=(
-                    f"🚨 SLA ALERT: тикет не взят в работу более {SLA_TAKE_MINUTES} минут\n\n"
-                    f"🧾 {row['request_number']}\n"
-                    f"🆔 CLID: {row['clid']}\n"
-                    f"📂 Тема: {row['topic_label']}\n"
-                    f"🕒 Создано: {row['created_at']}"
+                    f"🚨 <b>SLA ALERT</b> — тикет не взят в работу более {SLA_TAKE_MINUTES} мин.\n"
+                    f"{'─' * 28}\n"
+                    f"🧾 <code>{row['request_number']}</code>\n"
+                    f"🆔 CLID: <code>{escape(row['clid'])}</code>\n"
+                    f"📂 {escape(row['topic_label'])}\n"
+                    f"🕒 {fmt_dt(row['created_at'])}"
                 ),
+                parse_mode=ParseMode.HTML,
             )
             mark_take_alert_sent(row["id"])
         except Exception as e:
@@ -801,7 +848,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=ReplyKeyboardRemove(),
             )
         else:
-            await message.reply_text(LANG_TEXTS[lang]["ticket_closed_create_new"])
+            await message.reply_text(LANG_TEXTS[lang]["ticket_closed_create_new"], parse_mode=ParseMode.HTML)
         return
 
     user_sessions[user.id] = {
@@ -810,7 +857,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     await message.reply_text(
-        "Выберите язык / Choose language / Ընտրեք լեզուն",
+        "🌐 Выберите язык / Choose language / Ընтреьте لезуն",
         reply_markup=build_language_keyboard(),
     )
 
@@ -862,7 +909,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         row = get_request_by_number(request_number)
 
         if not row:
-            await query.message.reply_text("Заявка не найдена.")
+            await query.message.reply_text("⚠️ Заявка не найдена.")
             return
 
         if query.message.chat_id != OPERATORS_CHAT_ID:
@@ -872,7 +919,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if action == "start":
             if row["topic_thread_id"]:
-                await query.message.reply_text("Заявка уже взята в работу и переведена в отдельную тему.")
+                await query.message.reply_text("ℹ️ Заявка уже взята в работу и переведена в отдельную тему.")
                 return
 
             alias = pick_operator_alias(row["language"])
@@ -901,12 +948,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=OPERATORS_CHAT_ID,
                 message_thread_id=thread_id,
                 text=(
-                    f"🧾 Тикет {request_number} взят в работу\n"
-                    f"👤 Оператор: {operator_name}\n"
-                    f"🎭 Публичный псевдоним для пользователя: {alias}\n"
-                    f"📌 Статус: {row['status']}\n"
-                    f"🔁 Диалог: {row['dialog_state']}"
+                    f"🛠 <b>Тикет взят в работу</b>\n"
+                    f"{'─' * 28}\n"
+                    f"🧾 <code>{request_number}</code>\n"
+                    f"👤 <b>Оператор:</b> {escape(operator_name)}\n"
+                    f"🎭 <b>Псевдоним для пользователя:</b> {escape(alias)}\n"
+                    f"📌 <b>Статус:</b> {STATUS_LABELS.get(row['status'], row['status'])}\n"
+                    f"🔁 <b>Диалог:</b> {DIALOG_STATE_LABELS.get(row['dialog_state'], row['dialog_state'])}"
                 ),
+                parse_mode=ParseMode.HTML,
                 reply_markup=build_topic_control_keyboard(request_number, row["status"]),
             )
             set_topic_control_message_id(row["id"], control_msg.message_id)
@@ -917,6 +967,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     message_thread_id=thread_id,
                     photo=row["issue_photo_file_id"],
                     caption=request_card_text(row),
+                    parse_mode=ParseMode.HTML,
                     reply_markup=build_topic_control_keyboard(request_number, row["status"]),
                 )
             else:
@@ -924,17 +975,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=OPERATORS_CHAT_ID,
                     message_thread_id=thread_id,
                     text=request_card_text(row),
+                    parse_mode=ParseMode.HTML,
                     reply_markup=build_topic_control_keyboard(request_number, row["status"]),
                 )
 
             await context.bot.send_message(
                 chat_id=row["user_id"],
-                text=LANG_TEXTS[row["language"]]["ticket_taken"].format(alias=alias),
+                text=LANG_TEXTS[row["language"]]["ticket_taken"].format(alias=escape(alias)),
+                parse_mode=ParseMode.HTML,
                 reply_markup=build_wait_keyboard(row["language"]),
             )
 
             await query.message.reply_text(
-                f"🛠 Заявка {request_number} взята в работу и перенесена в отдельную тему."
+                f"🛠 Заявка <code>{request_number}</code> взята в работу и перенесена в отдельную тему.",
+                parse_mode=ParseMode.HTML,
             )
             return
 
@@ -954,18 +1008,28 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.send_message(
                         chat_id=OPERATORS_CHAT_ID,
                         message_thread_id=row["topic_thread_id"],
-                        text=f"✅ Тикет {request_number} закрыт.",
+                        text=f"✅ Тикет <code>{request_number}</code> закрыт.",
+                        parse_mode=ParseMode.HTML,
                         reply_markup=build_topic_control_keyboard(request_number, row["status"]),
                     )
                 except Exception as e:
                     logger.warning("Не удалось отправить сообщение о закрытии в тему: %s", e)
 
-            await query.message.reply_text(f"✅ Заявка {request_number} переведена в статус closed.")
+            await query.message.reply_text(
+                f"✅ Заявка <code>{request_number}</code> закрыта.",
+                parse_mode=ParseMode.HTML,
+            )
 
             try:
+                lang = row["language"]
                 await context.bot.send_message(
                     chat_id=row["user_id"],
-                    text=f"{LANG_TEXTS[row['language']]['closed_to_user']}\n\n🧾 Request number: {request_number}\n\n{LANG_TEXTS[row['language']]['ticket_closed_create_new']}",
+                    text=(
+                        f"{LANG_TEXTS[lang]['closed_to_user']}\n"
+                        f"🧾 <code>{request_number}</code>\n\n"
+                        f"{LANG_TEXTS[lang]['ticket_closed_create_new']}"
+                    ),
+                    parse_mode=ParseMode.HTML,
                     reply_markup=ReplyKeyboardRemove(),
                 )
             except Exception as e:
@@ -989,13 +1053,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.send_message(
                         chat_id=OPERATORS_CHAT_ID,
                         message_thread_id=row["topic_thread_id"],
-                        text=f"🔄 Тикет {request_number} переоткрыт.",
+                        text=f"🔄 Тикет <code>{request_number}</code> переоткрыт.",
+                        parse_mode=ParseMode.HTML,
                         reply_markup=build_topic_control_keyboard(request_number, row["status"]),
                     )
                 except Exception as e:
                     logger.warning("Не удалось отправить сообщение о переоткрытии в тему: %s", e)
 
-            await query.message.reply_text(f"🔄 Заявка {request_number} переоткрыта.")
+            await query.message.reply_text(
+                f"🔄 Заявка <code>{request_number}</code> переоткрыта.",
+                parse_mode=ParseMode.HTML,
+            )
             return
 
         if action == "card":
@@ -1004,9 +1072,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_photo(
                     photo=row["issue_photo_file_id"],
                     caption=request_card_text(row),
+                    parse_mode=ParseMode.HTML,
                 )
             else:
-                await query.message.reply_text(request_card_text(row))
+                await query.message.reply_text(
+                    request_card_text(row),
+                    parse_mode=ParseMode.HTML,
+                )
             return
 
 
@@ -1162,22 +1234,25 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
                     chat_id=OPERATORS_CHAT_ID,
                     photo=row["issue_photo_file_id"],
                     caption=request_card_text(row),
+                    parse_mode=ParseMode.HTML,
                     reply_markup=keyboard,
                 )
             else:
                 sent = await context.bot.send_message(
                     chat_id=OPERATORS_CHAT_ID,
                     text=request_card_text(row),
+                    parse_mode=ParseMode.HTML,
                     reply_markup=keyboard,
                 )
             set_initial_group_message_id(request_id, sent.message_id)
         except Exception as e:
             logger.exception("Не удалось отправить заявку в операторский чат: %s", e)
-            await message.reply_text("Не удалось отправить обращение оператору. Попробуйте позже.")
+            await message.reply_text("⚠️ Не удалось отправить обращение оператору. Попробуйте позже.")
             return
 
         await message.reply_text(
-            f"{LANG_TEXTS[lang]['request_sent']}\n\n🧾 Request number: {request_number}",
+            f"{LANG_TEXTS[lang]['request_sent']}\n🧾 <code>{request_number}</code>",
+            parse_mode=ParseMode.HTML,
             reply_markup=build_wait_keyboard(lang),
         )
 
@@ -1255,7 +1330,8 @@ async def handle_operator_message(update: Update, context: ContextTypes.DEFAULT_
             )
 
             await message.reply_text(
-                f"Ответ отправлен пользователю.\n🧾 {row['request_number']}\n🔁 Диалог: waiting_user"
+                f"✅ Ответ отправлен пользователю.\n🧾 <code>{row['request_number']}</code>  •  🔁 ожидает пользователя",
+                parse_mode=ParseMode.HTML,
             )
             return
 
@@ -1263,8 +1339,9 @@ async def handle_operator_message(update: Update, context: ContextTypes.DEFAULT_
         row = get_request_by_initial_message_id(message.reply_to_message.message_id)
         if row and not row["topic_thread_id"]:
             await message.reply_text(
-                f"Сначала нажмите «Взять в работу» у заявки {row['request_number']}. "
-                f"После этого бот создаст отдельную тему для переписки."
+                f"ℹ️ Сначала нажмите «Взять в работу» у заявки <code>{row['request_number']}</code>. "
+                f"После этого бот создаст отдельную тему для переписки.",
+                parse_mode=ParseMode.HTML,
             )
             return
 
@@ -1275,11 +1352,13 @@ async def cmd_new_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     rows = get_requests_by_status("new")
     if not rows:
-        await update.message.reply_text("Новых заявок нет.")
+        await update.message.reply_text("✅ Новых заявок нет.")
         return
 
+    lines = "\n\n".join(short_request_line(r) for r in rows)
     await update.message.reply_text(
-        "🆕 Новые заявки:\n\n" + "\n".join(short_request_line(r) for r in rows)
+        f"🆕 <b>Новые заявки</b> ({len(rows)})\n{'─' * 28}\n\n{lines}",
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -1289,11 +1368,13 @@ async def cmd_in_progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     rows = get_requests_by_status("in_progress")
     if not rows:
-        await update.message.reply_text("Заявок в работе нет.")
+        await update.message.reply_text("✅ Заявок в работе нет.")
         return
 
+    lines = "\n\n".join(short_request_line(r) for r in rows)
     await update.message.reply_text(
-        "🛠 Заявки в работе:\n\n" + "\n".join(short_request_line(r) for r in rows)
+        f"🛠 <b>Заявки в работе</b> ({len(rows)})\n{'─' * 28}\n\n{lines}",
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -1303,11 +1384,13 @@ async def cmd_closed_requests(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     rows = get_requests_by_status("closed")
     if not rows:
-        await update.message.reply_text("Закрытых заявок нет.")
+        await update.message.reply_text("ℹ️ Закрытых заявок нет.")
         return
 
+    lines = "\n\n".join(short_request_line(r) for r in rows)
     await update.message.reply_text(
-        "✅ Закрытые заявки:\n\n" + "\n".join(short_request_line(r) for r in rows)
+        f"✅ <b>Закрытые заявки</b> ({len(rows)})\n{'─' * 28}\n\n{lines}",
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -1316,12 +1399,24 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     total, new_cnt, in_progress_cnt, closed_cnt = get_stats()
+
+    def bar(count: int, total: int, width: int = 10) -> str:
+        if total == 0:
+            return "░" * width
+        filled = round(count / total * width)
+        return "█" * filled + "░" * (width - filled)
+
+    pct = lambda n: f"{round(n / total * 100)}%" if total else "—"
+
     await update.message.reply_text(
-        "📊 Статистика заявок\n\n"
-        f"Всего: {total}\n"
-        f"New: {new_cnt}\n"
-        f"In progress: {in_progress_cnt}\n"
-        f"Closed: {closed_cnt}"
+        f"📊 <b>Статистика заявок</b>\n"
+        f"{'─' * 28}\n"
+        f"📦 Всего:       <b>{total}</b>\n"
+        f"{'─' * 28}\n"
+        f"🆕 Новые:       <b>{new_cnt}</b>  {bar(new_cnt, total)}  {pct(new_cnt)}\n"
+        f"🛠 В работе:    <b>{in_progress_cnt}</b>  {bar(in_progress_cnt, total)}  {pct(in_progress_cnt)}\n"
+        f"✅ Закрытые:    <b>{closed_cnt}</b>  {bar(closed_cnt, total)}  {pct(closed_cnt)}",
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -1330,18 +1425,26 @@ async def cmd_clid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args:
-        await update.message.reply_text("Использование: /clid 400004151762")
+        await update.message.reply_text(
+            "ℹ️ Использование: <code>/clid 400004151762</code>",
+            parse_mode=ParseMode.HTML,
+        )
         return
 
     clid = context.args[0].strip()
     rows = get_requests_by_clid(clid)
 
     if not rows:
-        await update.message.reply_text(f"По CLID {clid} заявки не найдены.")
+        await update.message.reply_text(
+            f"🔎 По CLID <code>{escape(clid)}</code> заявки не найдены.",
+            parse_mode=ParseMode.HTML,
+        )
         return
 
+    lines = "\n\n".join(short_request_line(r) for r in rows)
     await update.message.reply_text(
-        f"🔎 Заявки по CLID {clid}:\n\n" + "\n".join(short_request_line(r) for r in rows)
+        f"🔎 <b>Заявки по CLID <code>{escape(clid)}</code></b> ({len(rows)})\n{'─' * 28}\n\n{lines}",
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -1350,29 +1453,41 @@ async def cmd_force_close(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args:
-        await update.message.reply_text("Использование: /force_close REQ-000123")
+        await update.message.reply_text(
+            "ℹ️ Использование: <code>/force_close REQ-000123</code>",
+            parse_mode=ParseMode.HTML,
+        )
         return
 
     request_number = context.args[0].strip()
     row = get_request_by_number(request_number)
 
     if not row:
-        await update.message.reply_text(f"Тикет {request_number} не найден.")
+        await update.message.reply_text(
+            f"⚠️ Тикет <code>{escape(request_number)}</code> не найден.",
+            parse_mode=ParseMode.HTML,
+        )
         return
 
     if row["status"] == "closed":
-        await update.message.reply_text(f"Тикет {request_number} уже закрыт.")
+        await update.message.reply_text(
+            f"ℹ️ Тикет <code>{escape(request_number)}</code> уже закрыт.",
+            parse_mode=ParseMode.HTML,
+        )
         return
 
     update_request_status(row["id"], "closed")
 
     try:
+        lang = row["language"]
         await context.bot.send_message(
             chat_id=row["user_id"],
             text=(
-                f"✅ Ваше обращение {request_number} было закрыто оператором.\n\n"
-                f"Теперь вы можете создать новое через /start."
+                f"{LANG_TEXTS[lang]['closed_to_user']}\n"
+                f"🧾 <code>{request_number}</code>\n\n"
+                f"{LANG_TEXTS[lang]['ticket_closed_create_new']}"
             ),
+            parse_mode=ParseMode.HTML,
             reply_markup=ReplyKeyboardRemove(),
         )
     except Exception as e:
@@ -1383,13 +1498,17 @@ async def cmd_force_close(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=OPERATORS_CHAT_ID,
                 message_thread_id=row["topic_thread_id"],
-                text=f"✅ Тикет {request_number} принудительно закрыт командой /force_close.",
+                text=f"✅ Тикет <code>{escape(request_number)}</code> принудительно закрыт (/force_close).",
+                parse_mode=ParseMode.HTML,
                 reply_markup=build_topic_control_keyboard(request_number, "closed"),
             )
         except Exception as e:
             logger.warning("Не удалось написать в тему при force_close: %s", e)
 
-    await update.message.reply_text(f"Тикет {request_number} закрыт.")
+    await update.message.reply_text(
+        f"✅ Тикет <code>{escape(request_number)}</code> закрыт.",
+        parse_mode=ParseMode.HTML,
+    )
 
 
 async def cmd_force_close_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1408,7 +1527,7 @@ async def cmd_force_close_all(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if not rows:
         conn.close()
-        await update.message.reply_text("Активных тикетов нет.")
+        await update.message.reply_text("✅ Активных тикетов нет.")
         return
 
     cur.execute("""
@@ -1427,12 +1546,15 @@ async def cmd_force_close_all(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     for row in rows:
         try:
+            lang = row["language"]
             await context.bot.send_message(
                 chat_id=row["user_id"],
                 text=(
-                    f"✅ Ваше обращение {row['request_number']} было принудительно закрыто.\n\n"
-                    f"Теперь вы можете открыть новое через /start."
+                    f"{LANG_TEXTS[lang]['closed_to_user']}\n"
+                    f"🧾 <code>{row['request_number']}</code>\n\n"
+                    f"{LANG_TEXTS[lang]['ticket_closed_create_new']}"
                 ),
+                parse_mode=ParseMode.HTML,
                 reply_markup=ReplyKeyboardRemove(),
             )
         except Exception as e:
@@ -1443,7 +1565,8 @@ async def cmd_force_close_all(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await context.bot.send_message(
                     chat_id=OPERATORS_CHAT_ID,
                     message_thread_id=row["topic_thread_id"],
-                    text=f"✅ Тикет {row['request_number']} принудительно закрыт командой /force_close_all.",
+                    text=f"✅ Тикет <code>{row['request_number']}</code> принудительно закрыт (/force_close_all).",
+                    parse_mode=ParseMode.HTML,
                     reply_markup=build_topic_control_keyboard(row["request_number"], "closed"),
                 )
             except Exception as e:
@@ -1451,7 +1574,10 @@ async def cmd_force_close_all(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         closed_count += 1
 
-    await update.message.reply_text(f"Принудительно закрыто тикетов: {closed_count}")
+    await update.message.reply_text(
+        f"✅ Принудительно закрыто тикетов: <b>{closed_count}</b>",
+        parse_mode=ParseMode.HTML,
+    )
 
 
 def main():
